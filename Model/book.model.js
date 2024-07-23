@@ -1,5 +1,5 @@
 const { Client } = require('@elastic/elasticsearch');
-
+const { v4: uuidv4 } = require('uuid');
 const client = new Client({
     node: 'http://localhost:9200', // Replace with your local Elasticsearch URL
     auth: {
@@ -7,6 +7,8 @@ const client = new Client({
         password: 'your-password' // Replace with your local Elasticsearch password, if needed
     }
 });
+
+
 async function createIndex() {
     try {
         await client.indices.create({
@@ -16,23 +18,47 @@ async function createIndex() {
                     properties: {
                         book_id: { type: 'keyword' },
                         book_name: { type: 'text' },
-                        chapters: {
-                            type: 'nested',
+                        chunks: {
+                            type: 'nested',  // This field is nested
                             properties: {
-                                chapter_id: { type: 'keyword' },
-                                chapter_name: { type: 'text' },
-                                summary: { type: 'text' },
-                            },
+                                chunk_id: { type: 'keyword' },
+                                text: { type: 'text' },
+                                chunk_metadata: {
+                                    type: 'nested',  // This field is nested
+                                    properties: {
+                                        metadata_id: { type: 'keyword' },
+                                        chunk_related_text: { type: 'text' }
+                                    }
+                                },
+                                response_data: {
+                                    type: 'nested',  // This field is nested
+                                    properties: {
+                                        response_id: { type: 'keyword' },
+                                        summary: { type: 'text' }
+                                    }
+                                }
+                            }
                         },
-                    },
-                },
-            },
+                        prompt_data: {
+                            type: 'nested',  // This field is nested
+                            properties: {
+                                prompt_id: { type: 'keyword' },
+                                text: { type: 'text' }
+                            }
+                        }
+                    }
+                }
+            }
         });
         console.log('Index created successfully');
     } catch (error) {
         console.error('Error creating index:', error);
     }
 }
+
+
+
+
 
 
 async function addBook(book) {
@@ -81,7 +107,8 @@ async function deleteBookById(bookId) {
 
 async function searchSummaries(bookId, queryText) {
     try {
-        const result = await client.search({
+        // Step 1: Search in chunks.response_data.summary
+        const responseDataResults = await client.search({
             index: 'books',
             body: {
                 query: {
@@ -92,13 +119,13 @@ async function searchSummaries(bookId, queryText) {
                             },
                             {
                                 nested: {
-                                    path: 'chapters',
+                                    path: 'chunks.response_data',
                                     query: {
                                         bool: {
                                             should: [
                                                 {
                                                     match: {
-                                                        'chapters.summary': {
+                                                        'chunks.response_data.summary': {
                                                             query: queryText,
                                                             fuzziness: 'AUTO',  // Allow for typos and partial matches
                                                             operator: 'or'     // Allow for any term to match
@@ -107,7 +134,7 @@ async function searchSummaries(bookId, queryText) {
                                                 },
                                                 {
                                                     match_phrase: {
-                                                        'chapters.summary': {
+                                                        'chunks.response_data.summary': {
                                                             query: queryText,
                                                             slop: 5  // Allow for a few words to be in between, if necessary
                                                         }
@@ -115,7 +142,7 @@ async function searchSummaries(bookId, queryText) {
                                                 },
                                                 {
                                                     match_phrase_prefix: {
-                                                        'chapters.summary': queryText  // Handle prefixes
+                                                        'chunks.response_data.summary': queryText  // Handle prefixes
                                                     }
                                                 }
                                             ],
@@ -123,7 +150,8 @@ async function searchSummaries(bookId, queryText) {
                                         }
                                     },
                                     inner_hits: {
-                                        _source: ['chapters.chapter_id', 'chapters.chapter_name', 'chapters.summary']
+                                        _source: ['chunks.response_data.response_id', 'chunks.response_data.summary'],
+                                        size: 10  // Limit the number of hits returned
                                     }
                                 }
                             }
@@ -133,29 +161,97 @@ async function searchSummaries(bookId, queryText) {
             }
         });
 
-        // Log the raw response for inspection
-        console.log('Raw Search Response:', result);
-
-        // Extract nested hits from the response
-        const hits = result.hits.hits.flatMap(hit => {
-            // Check if inner_hits is present
-            const innerHits = hit.inner_hits?.chapters?.hits?.hits || [];
+        // Extract nested hits from responseDataResults
+        let hits = responseDataResults.hits.hits.flatMap(hit => {
+            const innerHits = hit.inner_hits?.['chunks.response_data']?.hits?.hits || [];
             return innerHits.map(innerHit => ({
-                chapterId: innerHit._source.chapter_id,
-                chapterName: innerHit._source.chapter_name,
-                summary: innerHit._source.summary
+                responseId: innerHit._source.response_id,
+                summary: innerHit._source.summary,
+                _score: innerHit._score // Include the score for sorting
             }));
         });
 
-        // Sort hits by relevance score and return the most relevant one
-        const sortedHits = hits.sort((a, b) => b._score - a._score);
-        return sortedHits.length > 0 ? sortedHits[0] : null;
+        // If we have hits from response_data, return the top 3 results
+        if (hits.length > 0) {
+            hits = hits.sort((a, b) => b._score - a._score).slice(0, 3); // Return top 3 results
+            return hits;
+        }
+
+        // Step 2: If no results in response_data, search in chunks.chunk_metadata.chunk_related_text
+        const chunkMetadataResults = await client.search({
+            index: 'books',
+            body: {
+                query: {
+                    bool: {
+                        must: [
+                            {
+                                match: { 'book_id': bookId }
+                            },
+                            {
+                                nested: {
+                                    path: 'chunks.chunk_metadata',
+                                    query: {
+                                        bool: {
+                                            should: [
+                                                {
+                                                    match: {
+                                                        'chunks.chunk_metadata.chunk_related_text': {
+                                                            query: queryText,
+                                                            fuzziness: 'AUTO',  // Allow for typos and partial matches
+                                                            operator: 'or'     // Allow for any term to match
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    match_phrase: {
+                                                        'chunks.chunk_metadata.chunk_related_text': {
+                                                            query: queryText,
+                                                            slop: 5  // Allow for a few words to be in between, if necessary
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    match_phrase_prefix: {
+                                                        'chunks.chunk_metadata.chunk_related_text': queryText  // Handle prefixes
+                                                    }
+                                                }
+                                            ],
+                                            minimum_should_match: 1  // At least one of the should queries must match
+                                        }
+                                    },
+                                    inner_hits: {
+                                        _source: ['chunks.chunk_metadata.chunk_related_text'],
+                                        size: 10  // Limit the number of hits returned
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        });
+
+        // Extract nested hits from chunkMetadataResults
+        const chunkMetadataHits = chunkMetadataResults.hits.hits.flatMap(hit => {
+            const innerHits = hit.inner_hits?.['chunks.chunk_metadata']?.hits?.hits || [];
+            return innerHits.map(innerHit => ({
+                chunkRelatedText: innerHit._source.chunk_related_text,
+                _score: innerHit._score // Include the score for sorting
+            }));
+        });
+
+        // Combine hits from both searches and return the top 3 results
+        const allHits = [...hits, ...chunkMetadataHits].sort((a, b) => b._score - a._score).slice(0, 3);
+
+        return allHits.length > 0 ? allHits : { message: 'No relevant summaries found' };
 
     } catch (error) {
         console.error('Search Error:', error.message);
         throw new Error('Search Error: ' + error.message);
     }
 }
+
+
 
 
 
@@ -172,4 +268,74 @@ async function searchSummaries(bookId, queryText) {
 
 // // Call this function with the index name you want to delete
 // deleteIndex('books');
-module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries };
+
+async function getAllbookdata(){
+    try {
+        const result = await client.search({
+            index: 'books',
+            body: {
+                query: {
+                    match_all: {}  // Fetch all documents
+                }
+            }
+        });
+        
+        return result.hits.hits.map(hit => hit._source);
+    } catch (error) {
+        throw new Error('Error fetching books: ' + error.message);
+    }
+
+}
+
+async function updateDocument(book_id, queryText) {
+    try {
+        // Search for the document to get its ID
+        const searchResult = await client.search({
+            index: 'books',
+            body: {
+                query: {
+                    match: { book_id: book_id }
+                }
+            }
+        });
+
+        // Ensure that we found at least one document
+        if (searchResult.hits.hits.length === 0) {
+            throw new Error('Document not found');
+        }
+
+        // Extract the document ID
+        const documentId = searchResult.hits.hits[0]._id;
+
+        // Update the document
+        const response = await client.update({
+            index: 'books',
+            id: documentId,  // Use the document ID here
+            body: {
+                script: {
+                    source: `
+                        if (ctx._source.prompt_data == null) {
+                            ctx._source.prompt_data = [];
+                        }
+                        ctx._source.prompt_data.add(params.newPrompt);
+                    `,
+                    params: {
+                        newPrompt: {
+                            text: queryText,
+                            prompt_id: uuidv4()  // Generate a new UUID for the prompt_id
+                        }
+                    }
+                }
+            }
+        });
+
+        console.log('Document updated successfully:', response);
+        return response;
+    } catch (error) {
+        console.error('Error updating document:', error.message);
+        throw new Error('Error updating document: ' + error.message);
+    }
+}
+
+
+module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries,getAllbookdata ,updateDocument};
