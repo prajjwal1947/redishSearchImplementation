@@ -22,6 +22,20 @@ services:
     networks:
       - elastic_network
 
+  nodeapp:
+    build:
+      context: .
+    container_name: nodeapp
+    ports:
+      - 3000:3000
+      - 9229:9229
+    environment:
+      - NODE_ENV=local
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+    networks:
+      - elastic_network
+
 networks:
   elastic_network:
     driver: bridge
