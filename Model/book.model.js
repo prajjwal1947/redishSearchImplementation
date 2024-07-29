@@ -1,7 +1,11 @@
 const { Client } = require('@elastic/elasticsearch');
 const { v4: uuidv4 } = require('uuid');
 const client = new Client({
-    node: 'http://elasticsearch:9200', // Replace with your local Elasticsearch URL
+    node: 'http://localhost:9200', // Replace with your local Elasticsearch URL
+    auth: {
+        username: 'elastic', // Replace with your local Elasticsearch username, if needed
+        password: 'your-password' // Replace with your local Elasticsearch password, if needed
+    }, // Replace with your local Elasticsearch URL
    
 });
 
