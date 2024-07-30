@@ -339,4 +339,43 @@ async function updateDocument(book_id, queryText) {
 }
 
 
-module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries,getAllbookdata ,updateDocument};
+async function updateChunksData(book_id,book){
+    try {
+        // Fetch the document ID using the book_id
+        const searchResult = await client.search({
+            index: 'books',
+            body: {
+                query: {
+                    match: { book_id: book_id }
+                }
+            }
+        });
+
+        if (searchResult.hits.hits.length === 0) {
+            throw new Error('Document not found');
+        }
+
+        const documentId = searchResult.hits.hits[0]._id;
+
+        // Update the document
+        const response = await client.update({
+            index: 'books',
+            id: documentId,
+            body: {
+                doc: {
+                    chunks: book[0]._source.chunks[0]
+                }
+            }
+        });
+
+        return response;
+    } catch (error) {
+        console.error('Error updating book chunks data:', error);
+        throw new Error('Error updating book chunks data');
+    }
+
+
+}
+
+
+module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries,getAllbookdata ,updateDocument,updateChunksData};

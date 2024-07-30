@@ -110,7 +110,76 @@ async function getAllbookdata(req, res) {
 }
 
 
+async function addBookChunks(req, res) {
+    try {
+        const { book_id, chunk_related_text, summary } = req.body;
+
+        // Validate the request body
+        if (!book_id || !chunk_related_text || !summary) {
+            return res.status(400).json({ error: "book_id, chunk_related_text, and summary are required." });
+        }
+
+        // Fetch the book by book_id
+        let book = await BookModel.getBookById(book_id);
+
+        // If the book exists, update its chunk_metadata and response_data
+        if (book!=0) {
+            // Create new chunk_metadata and response_data entries
+            const newMetadata = {
+                metadata_id: uuidv4(),
+                chunk_related_text
+            };
+
+            const newResponseData = {
+                response_id: uuidv4(),
+                summary
+            };
+
+            // Update the existing book's chunks
+            if (book[0]._source.chunks && book[0]._source.chunks.length> 0) {
+                book[0]._source.chunks[0].chunk_metadata.push(newMetadata);
+                book[0]._source.chunks[0].response_data.push(newResponseData);
+            } else {
+                // If chunks array is empty, initialize it with the new data
+                book.chunks = [{
+                    chunk_id: uuidv4(),
+                    text: "",
+                    chunk_metadata: [newMetadata],
+                    response_data: [newResponseData]
+                }];
+            }
+
+    const response = await BookModel.updateChunksData(book_id, book);
+            res.status(200).json(response);
+        } else {
+            // If the book does not exist, create a new one
+            const newBook = {
+                book_id,
+                book_name: "", // You can provide a default name or use an empty string
+                chunks: [{
+                    chunk_id: uuidv4(),
+                    text: "",
+                    chunk_metadata: [{
+                        metadata_id: uuidv4(),
+                        chunk_related_text
+                    }],
+                    response_data: [{
+                        response_id: uuidv4(),
+                        summary
+                    }]
+                }]
+            };
+
+            const response = await BookModel.addBook(newBook);
+            res.status(201).json(response);
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
 
 
 
-module.exports = { createIndex, addBook, getBookById, searchSummaries, getAllbookdata, };
+
+
+module.exports = { createIndex,addBookChunks, addBook, getBookById, searchSummaries, getAllbookdata, };
