@@ -1,6 +1,8 @@
 const BookModel = require('../Model/book.model');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
+const path = require('path');
+const { spawn } = require('child_process');
 async function createIndex(req, res) {
     try {
         await BookModel.createIndex();
@@ -99,6 +101,17 @@ async function searchSummaries(req, res) {
     }
 }
 
+async function searchFrequencyofQuery(req,res){
+    const { book_id } = req.params;
+    const { queryText } = req.body;
+    try {
+        const results = await BookModel.queryOccurence(book_id, queryText); 
+        return res.status(200).json(results);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
 async function getAllbookdata(req, res) {
     try {
         const response = await BookModel.getAllbookdata();
@@ -179,7 +192,46 @@ async function addBookChunks(req, res) {
 }
 
 
+async function generateChunksFromPdf(req, res) {
+    const pythonScriptPath = path.join(__dirname, '../helper/extract_text.py'); // Adjust path if needed
+    const pythonInterpreter = path.join(__dirname, '../helper/venv/Scripts/python.exe'); // Adjust path if needed
+    const pdfPath = path.join(__dirname, '../view/9780429162794_webpdf.pdf');
+
+    
+    // Validate input
+    if (!pdfPath) {
+        return res.status(400).json({ error: 'pdfPath is required' });
+    }
+
+    // Run the Python script
+    const pythonProcess = spawn(pythonInterpreter, [pythonScriptPath, pdfPath]);
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+        output += data.toString('utf-8');
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString('utf-8');
+    });
+
+    pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+            return res.status(500).json({ error: `Python script failed with code ${code}`, details: errorOutput });
+        }
+
+        try {
+            const chunks = JSON.parse(output); // Parse the JSON output from Python
+            res.json(chunks);
+        } catch (error) {
+            res.status(500).json({ error: 'Error processing the output', details: error.message });
+        }
+    });
+}
 
 
 
-module.exports = { createIndex,addBookChunks, addBook, getBookById, searchSummaries, getAllbookdata, };
+
+module.exports = { createIndex,addBookChunks, addBook, getBookById, searchSummaries, getAllbookdata,searchFrequencyofQuery,generateChunksFromPdf };
