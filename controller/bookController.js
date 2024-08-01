@@ -197,6 +197,7 @@ async function generateChunksFromPdf(req, res) {
     const pythonInterpreter = path.join(__dirname, '../helper/venv/Scripts/python.exe'); // Adjust path if needed
     const pdfPath = path.join(__dirname, '../view/9780429162794_webpdf.pdf');
 
+    
     // Validate input
     if (!pdfPath) {
         return res.status(400).json({ error: 'pdfPath is required' });
