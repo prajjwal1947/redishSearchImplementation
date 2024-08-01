@@ -40,11 +40,14 @@ if __name__ == "__main__":
         # Remove BOM if present
         text_content = text_content.lstrip('\ufeff')
         
-        # Create list of dictionaries with chunk information
-        chunk_objects = [{"book_id": "4f91a575-0feb-4f87-bf0d-f19a4bb6e3af", "chunk_related_text": chunk} for chunk in chunks]
+        # Create the final output structure
+        output = {
+            "book_id": "4f91a575-0feb-4f87-bf0d-f19a4bb6e3af",
+            "chunks": [{"chunk_related_text": chunk} for chunk in chunks]
+        }
         
         # Print JSON to stdout
-        sys.stdout.buffer.write(json.dumps(chunk_objects, ensure_ascii=False, indent=2).encode('utf-8'))
+        sys.stdout.buffer.write(json.dumps(output, ensure_ascii=False, indent=2).encode('utf-8'))
     except Exception as e:
         # Print error to stderr
         sys.stderr.write(f"Error: {e}")
