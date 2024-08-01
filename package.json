@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "nodemon index.js"
   },
   "author": "",
   "license": "ISC",
@@ -16,6 +16,11 @@
     "config": "^3.3.12",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.5.136",
     "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
   }
 }
