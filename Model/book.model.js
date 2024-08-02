@@ -273,7 +273,7 @@ async function searchSummaries(bookId, queryText) {
 async function getAllbookdata(){
     try {
         const result = await client.search({
-            index: 'books',
+            index: 'book_chunks',
             body: {
                 query: {
                     match_all: {}  // Fetch all documents
@@ -377,59 +377,7 @@ async function updateChunksData(book_id,book){
 
 }
 
-async function queryOccurence(bookId, queryText){
-    try {
-        const response = await client.search({
-            index: 'books',
-            body: {
-                query: {
-                    bool: {
-                        must: [
-                            { match: { book_id: bookId } },
-                            {
-                                nested: {
-                                    path: 'chunks',
-                                    query: {
-                                        nested: {
-                                            path: 'chunks.chunk_metadata',
-                                            query: {
-                                                match: {
-                                                    'chunks.chunk_metadata.chunk_related_text': {
-                                                        query: queryText,
-                                                        operator: 'and'  // Requires all terms to match
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        });
-
-        console.log(`Found ${response.hits.total.value} documents with book_id "${bookId}" and query text related to "${queryText}"`);
-
-        let totalOccurrences = 0;
-
-        response.hits.hits.forEach(hit => {
-            hit._source.chunks.forEach(chunk => {
-                chunk.chunk_metadata.forEach(metadata => {
-                    if (metadata.chunk_related_text.includes(queryText)) {
-                        totalOccurrences++;
-                    }
-                });
-            });
-        });
-
-        console.log(`Total occurrences of query text "${queryText}": ${totalOccurrences}`);
-        return totalOccurrences;
-    } catch (error) {
-        console.error('Error searching for query text:', error);
-    }
-}
 
 
-module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries,getAllbookdata ,updateDocument,updateChunksData,queryOccurence};
+
+module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries,getAllbookdata ,updateDocument,updateChunksData};

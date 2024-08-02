@@ -74,10 +74,65 @@ async function deleteBookChunksByBookId(book_id) {
     }
 }
 
+async function queryOccurence(bookId, queryText){
+    try {
+        const response = await client.search({
+            index: 'book_chunks',
+            body: {
+                query: {
+                    bool: {
+                        must: [
+                            { match: { book_id: bookId } },
+                            {
+                                nested: {
+                                    path: 'chunks',
+                                    query: {
+                                        match: {
+                                            'chunks.chunk_related_text': {
+                                                query: queryText,
+                                                operator: 'and' // Requires all terms to match
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        });
+
+        console.log(`Found ${response.hits.total.value} documents with book_id "${bookId}" and query text related to "${queryText}"`);
+
+        let totalOccurrences = 0;
+
+        response.hits.hits.forEach(hit => {
+            hit._source.chunks.forEach(chunk => {
+                chunk.chunk_related_text.split(' ').forEach(word => {
+                    if (word.toLowerCase() === queryText.toLowerCase()) {
+                        totalOccurrences++;
+                    }
+                });
+            });
+        });
+        const result = {
+            book_id: bookId,
+            query_text: queryText,
+            occurrences: totalOccurrences,
+            message: `The query text ${queryText} appeared ${totalOccurrences} time(s) in the chunks of the book with ID ${bookId}.`
+        };
+
+        console.log(result.message);
+        return result;
+    } catch (error) {
+        console.error('Error searching for query text:', error);
+    }
+}
 
 
 module.exports = {
     createBookChunksIndex,
     indexBookChunks,
     deleteBookChunksByBookId,
+    queryOccurence
 };
