@@ -273,7 +273,7 @@ async function searchSummaries(bookId, queryText) {
 async function getAllbookdata(){
     try {
         const result = await client.search({
-            index: 'books',
+            index: 'book_chunks',
             body: {
                 query: {
                     match_all: {}  // Fetch all documents
@@ -376,6 +376,8 @@ async function updateChunksData(book_id,book){
 
 
 }
+
+
 
 
 module.exports = { createIndex,addBook, getBookById, deleteBookById, searchSummaries,getAllbookdata ,updateDocument,updateChunksData};
